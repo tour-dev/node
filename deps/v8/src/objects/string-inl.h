@@ -18,6 +18,7 @@
 #include "src/sandbox/external-pointer-inl.h"
 #include "src/sandbox/external-pointer.h"
 #include "src/strings/string-hasher-inl.h"
+#include "src/strings/unicode-inl.h"
 #include "src/utils/utils.h"
 
 // Has to be the last include (doesn't have include guards):
@@ -620,18 +621,20 @@ bool String::IsOneByteEqualTo(base::Vector<const char> str) {
 }
 
 template <typename Char>
-const Char* String::GetChars(PtrComprCageBase cage_base,
-                             const DisallowGarbageCollection& no_gc) const {
+const Char* String::GetDirectStringChars(
+    PtrComprCageBase cage_base, const DisallowGarbageCollection& no_gc) const {
   DCHECK(!SharedStringAccessGuardIfNeeded::IsNeeded(*this));
+  DCHECK(StringShape(*this).IsDirect());
   return StringShape(*this, cage_base).IsExternal()
              ? CharTraits<Char>::ExternalString::cast(*this).GetChars(cage_base)
              : CharTraits<Char>::String::cast(*this).GetChars(no_gc);
 }
 
 template <typename Char>
-const Char* String::GetChars(
+const Char* String::GetDirectStringChars(
     PtrComprCageBase cage_base, const DisallowGarbageCollection& no_gc,
     const SharedStringAccessGuardIfNeeded& access_guard) const {
+  DCHECK(StringShape(*this).IsDirect());
   return StringShape(*this, cage_base).IsExternal()
              ? CharTraits<Char>::ExternalString::cast(*this).GetChars(cage_base)
              : CharTraits<Char>::String::cast(*this).GetChars(no_gc,
@@ -954,6 +957,22 @@ ConsString String::VisitFlat(
         UNREACHABLE();
     }
   }
+}
+
+bool String::IsWellFormedUnicode(Isolate* isolate, Handle<String> string) {
+  // One-byte strings are definitionally well formed and cannot have unpaired
+  // surrogates.
+  if (string->IsOneByteRepresentation()) return true;
+
+  // TODO(v8:13557): The two-byte case can be optimized by extending the
+  // InstanceType. See
+  // https://docs.google.com/document/d/15f-1c_Ysw3lvjy_Gx0SmmD9qeO8UuXuAbWIpWCnTDO8/
+  string = Flatten(isolate, string);
+  DisallowGarbageCollection no_gc;
+  String::FlatContent flat = string->GetFlatContent(no_gc);
+  DCHECK(flat.IsFlat());
+  const uint16_t* data = flat.ToUC16Vector().begin();
+  return !unibrow::Utf16::HasUnpairedSurrogate(data, string->length());
 }
 
 template <>
@@ -1474,6 +1493,22 @@ SubStringRange::iterator SubStringRange::begin() {
 
 SubStringRange::iterator SubStringRange::end() {
   return SubStringRange::iterator(string_, first_ + length_, no_gc_);
+}
+
+void SeqOneByteString::clear_padding_destructively(int length) {
+  // Ensure we are not killing the map word, which is already set at this point
+  static_assert(SizeFor(0) >= kObjectAlignment + kTaggedSize);
+  memset(
+      reinterpret_cast<void*>(address() + SizeFor(length) - kObjectAlignment),
+      0, kObjectAlignment);
+}
+
+void SeqTwoByteString::clear_padding_destructively(int length) {
+  // Ensure we are not killing the map word, which is already set at this point
+  static_assert(SizeFor(0) >= kObjectAlignment + kTaggedSize);
+  memset(
+      reinterpret_cast<void*>(address() + SizeFor(length) - kObjectAlignment),
+      0, kObjectAlignment);
 }
 
 // static
