@@ -9,10 +9,10 @@
 HTTPS is the HTTP protocol over TLS/SSL. In Node.js this is implemented as a
 separate module.
 
-## Determining if crypto support is unavailable
+## Determining if https support is unavailable
 
 It is possible for Node.js to be built without including support for the
-`node:crypto` module. In such cases, attempting to `import` from `https` or
+`node:https` module. In such cases, attempting to `import` from `https` or
 calling `require('node:https')` will result in an error being thrown.
 
 When using CommonJS, the error thrown can be caught using try/catch:
