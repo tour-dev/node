@@ -30,10 +30,10 @@ It can be accessed using:
 const http2 = require('node:http2');
 ```
 
-## Determining if crypto support is unavailable
+## Determining if http2 support is unavailable
 
 It is possible for Node.js to be built without including support for the
-`node:crypto` module. In such cases, attempting to `import` from `node:http2` or
+`node:http2` module. In such cases, attempting to `import` from `node:http2` or
 calling `require('node:http2')` will result in an error being thrown.
 
 When using CommonJS, the error thrown can be caught using try/catch:
